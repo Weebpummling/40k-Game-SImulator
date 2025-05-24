@@ -4,6 +4,7 @@ import copy
 import uuid
 import pandas as pd
 import io
+import os 
 
 # --- Constants and Configuration ---
 
@@ -85,6 +86,46 @@ CARDS_DATA = {
         "vp_components": [{"label": "Base 2VP", "vp": 2}, {"label": "Additional 2VP", "vp": 2}]
     }
 }
+
+MISSION_TYPES = [
+    "Burden Of Trust", "Linchpin", "Purge The Foe", "Scorched Earth",
+    "Supply Drop", "Take And Hold", "Terraform", "The Ritual", "Unexploded Ordnance"
+]
+DEPLOYMENT_TYPES = [ 
+    "Crucible Of Battle", "Dawn Of War", "Hammer And Anvil", 
+    "Search And Destroy", "Sweeping Engagement", "Tipping Point"
+]
+
+DEFAULT_PRIMARY_SCORES_DATA = {
+    ("Burden Of Trust", "Crucible Of Battle"): [0, 5, 6, 6, 6], ("Burden Of Trust", "Dawn Of War"): [0, 6, 6, 5, 5],
+    ("Burden Of Trust", "Hammer And Anvil"): [0, 6, 7, 7, 6], ("Burden Of Trust", "Search And Destroy"): [0, 5, 6, 6, 7],
+    ("Burden Of Trust", "Sweeping Engagement"): [0, 5, 6, 6, 6], ("Burden Of Trust", "Tipping Point"): [0, 5, 7, 6, 7],
+    ("Linchpin", "Crucible Of Battle"): [0, 7, 7, 6, 6], ("Linchpin", "Dawn Of War"): [0, 6, 7, 6, 6],
+    ("Linchpin", "Hammer And Anvil"): [0, 6, 7, 6, 6], ("Linchpin", "Search And Destroy"): [0, 7, 7, 7, 7],
+    ("Linchpin", "Sweeping Engagement"): [0, 7, 7, 6, 6], ("Linchpin", "Tipping Point"): [0, 7, 7, 6, 7],
+    ("Purge The Foe", "Crucible Of Battle"): [2, 10, 9, 8, 7], ("Purge The Foe", "Dawn Of War"): [2, 10, 9, 7, 5],
+    ("Purge The Foe", "Hammer And Anvil"): [2, 10, 9, 7, 5], ("Purge The Foe", "Search And Destroy"): [2, 10, 9, 8, 7],
+    ("Purge The Foe", "Sweeping Engagement"): [2, 10, 9, 7, 6], ("Purge The Foe", "Tipping Point"): [2, 10, 9, 8, 7],
+    ("Scorched Earth", "Crucible Of Battle"): [0, 8, 8, 8, 10], ("Scorched Earth", "Dawn Of War"): [0, 8, 8, 7, 7],
+    ("Scorched Earth", "Hammer And Anvil"): [0, 8, 8, 7, 7], ("Scorched Earth", "Search And Destroy"): [0, 8, 8, 7, 9],
+    ("Scorched Earth", "Sweeping Engagement"): [0, 8, 8, 7, 9], ("Scorched Earth", "Tipping Point"): [0, 8, 8, 7, 9],
+    ("Supply Drop", "Crucible Of Battle"): [0, 4, 5, 5, 6], ("Supply Drop", "Dawn Of War"): [0, 4, 5, 5, 6],
+    ("Supply Drop", "Hammer And Anvil"): [0, 4, 5, 5, 6], ("Supply Drop", "Search And Destroy"): [0, 4, 5, 6, 6],
+    ("Supply Drop", "Sweeping Engagement"): [0, 4, 5, 5, 6], ("Supply Drop", "Tipping Point"): [0, 5, 5, 5, 5],
+    ("Take And Hold", "Crucible Of Battle"): [0, 9, 9, 8, 8], ("Take And Hold", "Dawn Of War"): [0, 9, 9, 7, 6],
+    ("Take And Hold", "Hammer And Anvil"): [0, 8, 8, 7, 7], ("Take And Hold", "Search And Destroy"): [0, 9, 10, 9, 8],
+    ("Take And Hold", "Sweeping Engagement"): [0, 9, 9, 8, 7], ("Take And Hold", "Tipping Point"): [0, 9, 9, 8, 7],
+    ("Terraform", "Crucible Of Battle"): [0, 7, 8, 8, 7], ("Terraform", "Dawn Of War"): [0, 7, 8, 7, 6],
+    ("Terraform", "Hammer And Anvil"): [0, 7, 8, 7, 7], ("Terraform", "Search And Destroy"): [0, 8, 8, 8, 7],
+    ("Terraform", "Sweeping Engagement"): [0, 7, 8, 8, 8], ("Terraform", "Tipping Point"): [0, 8, 8, 7, 6],
+    ("The Ritual", "Crucible Of Battle"): [0, 5, 8, 8, 8], ("The Ritual", "Dawn Of War"): [0, 5, 6, 6, 5],
+    ("The Ritual", "Hammer And Anvil"): [0, 5, 7, 7, 7], ("The Ritual", "Search And Destroy"): [0, 5, 7, 7, 7],
+    ("The Ritual", "Sweeping Engagement"): [0, 5, 6, 7, 6], ("The Ritual", "Tipping Point"): [0, 5, 7, 7, 6],
+    ("Unexploded Ordnance", "Crucible Of Battle"): [0, 4, 5, 5, 5], ("Unexploded Ordnance", "Dawn Of War"): [0, 5, 5, 6, 5],
+    ("Unexploded Ordnance", "Hammer And Anvil"): [0, 4, 5, 5, 4], ("Unexploded Ordnance", "Search And Destroy"): [0, 5, 6, 6, 5],
+    ("Unexploded Ordnance", "Sweeping Engagement"): [0, 5, 6, 6, 6], ("Unexploded Ordnance", "Tipping Point"): [0, 3, 4, 5, 5]
+}
+
 
 MAX_GAME_TURNS = 5
 VP_PER_SECONDARY_CARD_INPUT_MAX = 15 
@@ -175,72 +216,100 @@ def _build_player_active_deck(removal_option_key):
 
 
 def initialize_session_state():
+    # Initialize flags and core game state variables
     if 'game_started' not in st.session_state: st.session_state.game_started = False
-    if 'user_goes_first' not in st.session_state: st.session_state.user_goes_first = True
-    if 'paint_vp_bonus_selected' not in st.session_state: st.session_state.paint_vp_bonus_selected = False
+    if 'user_goes_first' not in st.session_state: st.session_state.user_goes_first = True # Used by start_new_game from setup_...
+    if 'paint_vp_bonus_selected' not in st.session_state: st.session_state.paint_vp_bonus_selected = False # Used by start_new_game from setup_...
     if 'current_game_turn' not in st.session_state: st.session_state.current_game_turn = 1
     if 'active_player_type' not in st.session_state: st.session_state.active_player_type = "user"
     if 'game_log' not in st.session_state: st.session_state.game_log = []
     
+    # Options that determine deck composition and default probabilities
     if 'user_removed_card_option' not in st.session_state: 
         st.session_state.user_removed_card_option = "Keep Both" 
     if 'opponent_removed_card_option' not in st.session_state:
         st.session_state.opponent_removed_card_option = "Keep Both"
+    if 'selected_mission' not in st.session_state:
+        st.session_state.selected_mission = MISSION_TYPES[0]
+    if 'selected_deployment' not in st.session_state:
+        st.session_state.selected_deployment = DEPLOYMENT_TYPES[0]
 
+    # Build player-specific active decks based on current options
     st.session_state.user_active_deck = _build_player_active_deck('user_removed_card_option')
     st.session_state.opponent_active_deck = _build_player_active_deck('opponent_removed_card_option')
     
+    # Initialize mulliganed cards tracker
     if 'mulliganed_cards_by_player' not in st.session_state:
         st.session_state.mulliganed_cards_by_player = {"user": set(), "opponent": set()}
         
+    # Initialize or ensure completeness of probabilities structure
     if 'probabilities' not in st.session_state:
         st.session_state.probabilities = {"user": {}, "opponent": {}}
     
     for player_type_init, active_deck_init in [("user", st.session_state.user_active_deck), 
                                                ("opponent", st.session_state.opponent_active_deck)]:
-        if player_type_init not in st.session_state.probabilities:
+        if player_type_init not in st.session_state.probabilities: # Ensure player key exists in probabilities
             st.session_state.probabilities[player_type_init] = {}
         
-        player_probs = st.session_state.probabilities[player_type_init]
+        player_probs_ref = st.session_state.probabilities[player_type_init] # Get a reference
         
-        for card_name_init in active_deck_init:
-            default_card_prob_components = ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_init, {})
+        for card_name_init in active_deck_init: # For all cards in this player's current active deck
+            default_card_components_probs = ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_init, {})
             
-            if card_name_init not in player_probs: 
-                player_probs[card_name_init] = copy.deepcopy(default_card_prob_components)
-            else: 
+            if card_name_init not in player_probs_ref: # If card missing from player's probs, add all components
+                player_probs_ref[card_name_init] = copy.deepcopy(default_card_components_probs)
+            else: # Card exists, ensure all its defined components and rounds exist
                 if card_name_init in CARDS_DATA: 
-                    for component in CARDS_DATA[card_name_init].get("vp_components", []):
-                        comp_label = component["label"]
-                        if comp_label not in player_probs[card_name_init]: 
-                            player_probs[card_name_init][comp_label] = \
-                                copy.deepcopy(default_card_prob_components.get(comp_label, {r: 0.6 for r in range(1, MAX_GAME_TURNS + 1)}))
-                        else: 
+                    for component_data in CARDS_DATA[card_name_init].get("vp_components", []):
+                        comp_label_init = component_data["label"]
+                        if comp_label_init not in player_probs_ref[card_name_init]: # Component missing
+                            player_probs_ref[card_name_init][comp_label_init] = \
+                                copy.deepcopy(default_card_components_probs.get(comp_label_init, 
+                                                                                {r: 0.6 for r in range(1, MAX_GAME_TURNS + 1)}))
+                        else: # Component exists, check rounds
                             for r_idx_init in range(1, MAX_GAME_TURNS + 1):
-                                if r_idx_init not in player_probs[card_name_init][comp_label]:
-                                    player_probs[card_name_init][comp_label][r_idx_init] = \
-                                        default_card_prob_components.get(comp_label, {}).get(r_idx_init, 0.6)
+                                if r_idx_init not in player_probs_ref[card_name_init][comp_label_init]:
+                                    player_probs_ref[card_name_init][comp_label_init][r_idx_init] = \
+                                        default_card_components_probs.get(comp_label_init, {}).get(r_idx_init, 0.6)
         
-        keys_to_remove_prob = [k for k in player_probs if k not in active_deck_init]
-        for k_rem_prob in keys_to_remove_prob:
-            del player_probs[k_rem_prob]
+        # Clean up probabilities for cards no longer in this player's active_deck
+        keys_to_remove_from_probs = [k for k in player_probs_ref if k not in active_deck_init]
+        for k_rem in keys_to_remove_from_probs:
+            del player_probs_ref[k_rem]
 
     if 'all_primary_vps' not in st.session_state:
         st.session_state.all_primary_vps = {"user": [0] * MAX_GAME_TURNS, "opponent": [0] * MAX_GAME_TURNS}
+    
+    # Transient state variables for current player actions
     if 'current_player_drawn_cards' not in st.session_state: st.session_state.current_player_drawn_cards = []
     if 'current_player_final_hand' not in st.session_state: st.session_state.current_player_final_hand = []
     if 'current_player_card_vps' not in st.session_state: st.session_state.current_player_card_vps = {} 
     if 'turn_segment_in_progress' not in st.session_state: st.session_state.turn_segment_in_progress = False
     if 'current_turn_component_prob_overrides' not in st.session_state:
         st.session_state.current_turn_component_prob_overrides = {}
+    
+    # Monte Carlo related state
     if 'monte_carlo_projection' not in st.session_state: 
         st.session_state.monte_carlo_projection = None 
     if 'num_mc_simulations' not in st.session_state: 
         st.session_state.num_mc_simulations = 5000 
+    
+    # Confirmation dialog flags
     if 'show_confirm_new_game_setup' not in st.session_state:
         st.session_state.show_confirm_new_game_setup = False
     if 'show_confirm_new_game_sidebar' not in st.session_state:
         st.session_state.show_confirm_new_game_sidebar = False
+
+def load_default_primary_scores(mission_name, deployment_name):
+    """Loads default primary scores from the hardcoded dictionary."""
+    key = (mission_name, deployment_name) # Assumes casing matches dictionary keys
+    scores = DEFAULT_PRIMARY_SCORES_DATA.get(key)
+
+    if scores:
+        return list(scores) # Return a copy of the list of 5 integer scores
+    else:
+        st.warning(f"Default primary scores for Mission '{mission_name}' and Deployment '{deployment_name}' not found in data. Defaulting to 0 for all turns.")
+        return None
 
 
 def get_cards_logged_by_player(player_type):
@@ -300,22 +369,35 @@ def get_ev_recommendation(ev_score):
 
 def start_new_game():
     st.session_state.game_started = True
+    # These 'setup_X' keys are set when "Start Game" (initiate_start_game_setup) is clicked
     st.session_state.user_goes_first = st.session_state.setup_user_goes_first 
     st.session_state.paint_vp_bonus_selected = st.session_state.setup_paint_vp_bonus 
     st.session_state.user_removed_card_option = st.session_state.setup_user_removed_card_option
     st.session_state.opponent_removed_card_option = st.session_state.setup_opponent_removed_card_option
+    st.session_state.selected_mission = st.session_state.setup_selected_mission
+    st.session_state.selected_deployment = st.session_state.setup_selected_deployment
     
     st.session_state.mulliganed_cards_by_player = {"user": set(), "opponent": set()}
     
     if st.session_state.get('setup_reset_probs_on_new_game', True): 
         st.session_state.probabilities = {"user": {}, "opponent": {}} 
 
-    initialize_session_state() 
+    initialize_session_state() # This will build active_decks and init/prune probabilities
+
+    # Load and set default primary scores AFTER initialize_session_state has set up active decks
+    default_mission_scores = load_default_primary_scores(
+        st.session_state.selected_mission,
+        st.session_state.selected_deployment
+    )
+    if default_mission_scores:
+        st.session_state.all_primary_vps["user"] = list(default_mission_scores) # Shared for both
+        st.session_state.all_primary_vps["opponent"] = list(default_mission_scores)
+    else: 
+        st.session_state.all_primary_vps = {"user": [0] * MAX_GAME_TURNS, "opponent": [0] * MAX_GAME_TURNS}
 
     st.session_state.current_game_turn = 1 
     st.session_state.active_player_type = "user" if st.session_state.user_goes_first else "opponent" 
     st.session_state.game_log = [] 
-    st.session_state.all_primary_vps = {"user": [0]*MAX_GAME_TURNS, "opponent": [0]*MAX_GAME_TURNS} 
     st.session_state.monte_carlo_projection = None 
     
     reset_transient_turn_state() 
@@ -596,11 +678,23 @@ def display_setup_screen():
     key_setup_user_removed_card = "widget_setup_user_removed_card_radio"
     key_setup_opponent_removed_card = "widget_setup_opponent_removed_card_radio"
     key_setup_reset_probs = "widget_reset_probs_on_new_game"
+    key_setup_mission = "widget_setup_selected_mission" # Key for the mission selectbox widget
+    key_setup_deployment = "widget_setup_selected_deployment" # Key for the deployment selectbox widget
+
 
     if st.session_state.get('show_confirm_new_game_setup', False):
         st.warning("Are you sure you want to start a new game with the selected settings? This will reset any current progress if a game was previously active.")
         col1, col2 = st.columns(2)
         if col1.button("Yes, Start New Game", key="confirm_yes_setup"):
+            # Transfer values from setup_... to main session state keys before starting
+            st.session_state.user_goes_first = st.session_state.setup_user_goes_first
+            st.session_state.paint_vp_bonus_selected = st.session_state.setup_paint_vp_bonus
+            st.session_state.user_removed_card_option = st.session_state.setup_user_removed_card_option
+            st.session_state.opponent_removed_card_option = st.session_state.setup_opponent_removed_card_option
+            st.session_state.selected_mission = st.session_state.setup_selected_mission # Transfer selected mission
+            st.session_state.selected_deployment = st.session_state.setup_selected_deployment # Transfer selected deployment
+            # setup_reset_probs_on_new_game is used directly by start_new_game
+
             start_new_game() 
             st.session_state.show_confirm_new_game_setup = False
             st.rerun()
@@ -608,31 +702,32 @@ def display_setup_screen():
             st.session_state.show_confirm_new_game_setup = False
             st.rerun()
     else:
-        st.checkbox("I will go first", value=st.session_state.get(key_setup_user_goes_first, True), key=key_setup_user_goes_first)
-        st.checkbox(f"Start with {PAINT_BONUS_VP} 'Battle Ready' VP (Paint Bonus)", 
-                    value=st.session_state.get(key_setup_paint_bonus, False), key=key_setup_paint_bonus)
+        # Display widgets using their specific keys
+        st.checkbox("I will go first", key=key_setup_user_goes_first)
+        st.checkbox(f"Start with {PAINT_BONUS_VP} 'Battle Ready' VP (Paint Bonus)", key=key_setup_paint_bonus)
         
+        st.selectbox("Select Mission:", options=MISSION_TYPES, key=key_setup_mission)
+        st.selectbox("Select Deployment:", options=DEPLOYMENT_TYPES, key=key_setup_deployment)
+
         removal_options = ["Keep Both", "Remove Cull the Horde", "Remove Bring It Down"]
         
         st.radio(
-            "User's Deck: Optional Card Removal:", options=removal_options,
-            index=removal_options.index(st.session_state.get("user_removed_card_option", "Keep Both")), 
-            key=key_setup_user_removed_card 
+            "User's Deck: Optional Card Removal:", options=removal_options, key=key_setup_user_removed_card 
         )
         st.radio(
-            "Opponent's Deck: Optional Card Removal:", options=removal_options,
-            index=removal_options.index(st.session_state.get("opponent_removed_card_option", "Keep Both")), 
-            key=key_setup_opponent_removed_card
+            "Opponent's Deck: Optional Card Removal:", options=removal_options, key=key_setup_opponent_removed_card
         )
 
-        st.checkbox("Reset card probabilities to default on new game start", 
-                    value=st.session_state.get(key_setup_reset_probs, True), key=key_setup_reset_probs)
+        st.checkbox("Reset card probabilities to default on new game start", key=key_setup_reset_probs)
         
         if st.button("Start Game", key="initiate_start_game_setup"):
+            # Explicitly capture current widget values into 'setup_X' session state vars
             st.session_state.setup_user_goes_first = st.session_state[key_setup_user_goes_first]
             st.session_state.setup_paint_vp_bonus = st.session_state[key_setup_paint_bonus]
             st.session_state.setup_user_removed_card_option = st.session_state[key_setup_user_removed_card]
             st.session_state.setup_opponent_removed_card_option = st.session_state[key_setup_opponent_removed_card]
+            st.session_state.setup_selected_mission = st.session_state[key_setup_mission] # Capture selected mission
+            st.session_state.setup_selected_deployment = st.session_state[key_setup_deployment] # Capture selected deployment
             st.session_state.setup_reset_probs_on_new_game = st.session_state[key_setup_reset_probs]
 
             st.session_state.show_confirm_new_game_setup = True
@@ -789,7 +884,6 @@ def display_current_turn_interface():
                     
                     current_override_val = st.session_state.current_turn_component_prob_overrides[card_name_override].get(comp_label_override, default_prob_for_slider)
                     
-                    # Slider for override probability
                     estimated_prob_percent = st.slider(
                         f"{comp_label_override}", 0, 100, int(current_override_val * 100), step=10,
                         key=f"override_prob_{card_name_override}_{comp_label_override.replace(' ','_')}_{st.session_state.current_game_turn}",
@@ -857,16 +951,21 @@ def display_probability_settings():
                                 st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab] = \
                                     copy.deepcopy(ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_tab,{}).get(comp_label_tab, {r:0.6 for r in range(1,MAX_GAME_TURNS+1)}))
 
-                            # Determine number of columns for current/future rounds
                             num_editable_rounds = MAX_GAME_TURNS - st.session_state.current_game_turn + 1
-                            if num_editable_rounds > 0:
+                            if num_editable_rounds <= 0 and st.session_state.game_started : 
+                                past_round_probs_text = []
+                                for r_idx_ui_past in range(MAX_GAME_TURNS):
+                                    game_round_ui_past = r_idx_ui_past + 1
+                                    past_prob_ui = st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab].get(game_round_ui_past, 0.0)
+                                    past_round_probs_text.append(f"T{game_round_ui_past}: {past_prob_ui*100:.0f}%")
+                                st.caption(", ".join(past_round_probs_text) + " (Past - Not Editable)")
+                            elif num_editable_rounds > 0 :
                                 slider_cols_prob = st.columns(num_editable_rounds)
                                 col_idx = 0
-                                for r_idx_ui in range(st.session_state.current_game_turn -1, MAX_GAME_TURNS): # Iterate from current game turn index
+                                for r_idx_ui in range(st.session_state.current_game_turn -1, MAX_GAME_TURNS): 
                                     game_round_ui = r_idx_ui + 1
                                     with slider_cols_prob[col_idx]:
                                         current_prob_float = st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab].get(game_round_ui, 0.0)
-                                        # Slider operates on 0-100 scale for percentage display
                                         new_prob_percent = st.slider(
                                             f"T{game_round_ui}", 0, 100, int(current_prob_float * 100), step=10, 
                                             key=f"prob_slider_{player_type_ui}_{card_name_tab}_{comp_label_tab.replace(' ','_')}_r{game_round_ui}", 
@@ -876,8 +975,6 @@ def display_probability_settings():
                                         if new_prob_float != current_prob_float: 
                                             st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab][game_round_ui] = new_prob_float
                                     col_idx +=1
-                            else: # All rounds have passed
-                                st.caption(f"Probabilities for T1-T{MAX_GAME_TURNS} (Past - Not Editable)")
                         st.markdown("---") 
                     else: 
                         st.caption(f"Probability data for '{card_name_tab}' not found for {player_type_ui}.")
@@ -926,16 +1023,29 @@ def main():
     st.set_page_config(layout="wide") 
     st.title("Warhammer 40k Game Simulator & Tracker") 
 
-    if 'setup_user_removed_card_option' not in st.session_state: 
-        st.session_state.setup_user_removed_card_option = "Keep Both"
-    if 'setup_opponent_removed_card_option' not in st.session_state:
-        st.session_state.setup_opponent_removed_card_option = "Keep Both"
+    # Initialize widget-specific keys for setup screen to ensure they exist before widgets are rendered
+    if 'widget_setup_user_goes_first' not in st.session_state:
+        st.session_state.widget_setup_user_goes_first = True
+    if 'widget_setup_paint_bonus' not in st.session_state:
+        st.session_state.widget_setup_paint_bonus = False
+    if 'widget_setup_user_removed_card_radio' not in st.session_state: # Key for the radio widget itself
+        st.session_state.widget_setup_user_removed_card_radio = "Keep Both"
+    if 'widget_setup_opponent_removed_card_radio' not in st.session_state: # Key for the radio widget itself
+        st.session_state.widget_setup_opponent_removed_card_radio = "Keep Both"
+    if 'widget_reset_probs_on_new_game' not in st.session_state:
+        st.session_state.widget_reset_probs_on_new_game = True
+    if 'widget_setup_selected_mission' not in st.session_state:
+        st.session_state.widget_setup_selected_mission = MISSION_TYPES[0]
+    if 'widget_setup_selected_deployment' not in st.session_state:
+        st.session_state.widget_setup_selected_deployment = DEPLOYMENT_TYPES[0]
+        
+    # Initialize confirmation flags if they don't exist
     if 'show_confirm_new_game_setup' not in st.session_state: 
         st.session_state.show_confirm_new_game_setup = False
     if 'show_confirm_new_game_sidebar' not in st.session_state:
         st.session_state.show_confirm_new_game_sidebar = False
         
-    initialize_session_state() 
+    initialize_session_state() # Initialize core game state based on current setup choices
 
     if not st.session_state.game_started: 
         display_setup_screen()
@@ -1039,6 +1149,8 @@ def main():
                 st.session_state.game_started = False 
                 st.session_state.setup_user_removed_card_option = "Keep Both" 
                 st.session_state.setup_opponent_removed_card_option = "Keep Both"
+                st.session_state.setup_selected_mission = MISSION_TYPES[0] 
+                st.session_state.setup_selected_deployment = DEPLOYMENT_TYPES[0] 
                 initialize_session_state() 
                 st.session_state.show_confirm_new_game_sidebar = False
                 st.rerun()
