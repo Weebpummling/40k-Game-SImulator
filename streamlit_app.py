@@ -216,15 +216,13 @@ def _build_player_active_deck(removal_option_key):
 
 
 def initialize_session_state():
-    # Initialize flags and core game state variables
     if 'game_started' not in st.session_state: st.session_state.game_started = False
-    if 'user_goes_first' not in st.session_state: st.session_state.user_goes_first = True # Used by start_new_game from setup_...
-    if 'paint_vp_bonus_selected' not in st.session_state: st.session_state.paint_vp_bonus_selected = False # Used by start_new_game from setup_...
+    if 'user_goes_first' not in st.session_state: st.session_state.user_goes_first = True 
+    if 'paint_vp_bonus_selected' not in st.session_state: st.session_state.paint_vp_bonus_selected = False 
     if 'current_game_turn' not in st.session_state: st.session_state.current_game_turn = 1
     if 'active_player_type' not in st.session_state: st.session_state.active_player_type = "user"
     if 'game_log' not in st.session_state: st.session_state.game_log = []
     
-    # Options that determine deck composition and default probabilities
     if 'user_removed_card_option' not in st.session_state: 
         st.session_state.user_removed_card_option = "Keep Both" 
     if 'opponent_removed_card_option' not in st.session_state:
@@ -234,81 +232,69 @@ def initialize_session_state():
     if 'selected_deployment' not in st.session_state:
         st.session_state.selected_deployment = DEPLOYMENT_TYPES[0]
 
-    # Build player-specific active decks based on current options
     st.session_state.user_active_deck = _build_player_active_deck('user_removed_card_option')
     st.session_state.opponent_active_deck = _build_player_active_deck('opponent_removed_card_option')
     
-    # Initialize mulliganed cards tracker
     if 'mulliganed_cards_by_player' not in st.session_state:
         st.session_state.mulliganed_cards_by_player = {"user": set(), "opponent": set()}
         
-    # Initialize or ensure completeness of probabilities structure
     if 'probabilities' not in st.session_state:
         st.session_state.probabilities = {"user": {}, "opponent": {}}
     
     for player_type_init, active_deck_init in [("user", st.session_state.user_active_deck), 
                                                ("opponent", st.session_state.opponent_active_deck)]:
-        if player_type_init not in st.session_state.probabilities: # Ensure player key exists in probabilities
+        if player_type_init not in st.session_state.probabilities: 
             st.session_state.probabilities[player_type_init] = {}
         
-        player_probs_ref = st.session_state.probabilities[player_type_init] # Get a reference
+        player_probs = st.session_state.probabilities[player_type_init] 
         
-        for card_name_init in active_deck_init: # For all cards in this player's current active deck
-            default_card_components_probs = ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_init, {})
+        for card_name_init in active_deck_init: 
+            default_card_prob_components = ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_init, {})
             
-            if card_name_init not in player_probs_ref: # If card missing from player's probs, add all components
-                player_probs_ref[card_name_init] = copy.deepcopy(default_card_components_probs)
-            else: # Card exists, ensure all its defined components and rounds exist
+            if card_name_init not in player_probs: 
+                player_probs[card_name_init] = copy.deepcopy(default_card_prob_components)
+            else: 
                 if card_name_init in CARDS_DATA: 
-                    for component_data in CARDS_DATA[card_name_init].get("vp_components", []):
-                        comp_label_init = component_data["label"]
-                        if comp_label_init not in player_probs_ref[card_name_init]: # Component missing
-                            player_probs_ref[card_name_init][comp_label_init] = \
-                                copy.deepcopy(default_card_components_probs.get(comp_label_init, 
-                                                                                {r: 0.6 for r in range(1, MAX_GAME_TURNS + 1)}))
-                        else: # Component exists, check rounds
+                    for component in CARDS_DATA[card_name_init].get("vp_components", []):
+                        comp_label = component["label"]
+                        if comp_label not in player_probs[card_name_init]: 
+                            player_probs[card_name_init][comp_label] = \
+                                copy.deepcopy(default_card_prob_components.get(comp_label, {r: 0.6 for r in range(1, MAX_GAME_TURNS + 1)}))
+                        else: 
                             for r_idx_init in range(1, MAX_GAME_TURNS + 1):
-                                if r_idx_init not in player_probs_ref[card_name_init][comp_label_init]:
-                                    player_probs_ref[card_name_init][comp_label_init][r_idx_init] = \
-                                        default_card_components_probs.get(comp_label_init, {}).get(r_idx_init, 0.6)
+                                if r_idx_init not in player_probs[card_name_init][comp_label]:
+                                    player_probs[card_name_init][comp_label][r_idx_init] = \
+                                        default_card_prob_components.get(comp_label, {}).get(r_idx_init, 0.6)
         
-        # Clean up probabilities for cards no longer in this player's active_deck
-        keys_to_remove_from_probs = [k for k in player_probs_ref if k not in active_deck_init]
-        for k_rem in keys_to_remove_from_probs:
-            del player_probs_ref[k_rem]
+        keys_to_remove_prob = [k for k in player_probs if k not in active_deck_init]
+        for k_rem_prob in keys_to_remove_prob:
+            del player_probs[k_rem_prob]
 
-    if 'all_primary_vps' not in st.session_state:
+    if 'all_primary_vps' not in st.session_state: 
         st.session_state.all_primary_vps = {"user": [0] * MAX_GAME_TURNS, "opponent": [0] * MAX_GAME_TURNS}
     
-    # Transient state variables for current player actions
     if 'current_player_drawn_cards' not in st.session_state: st.session_state.current_player_drawn_cards = []
     if 'current_player_final_hand' not in st.session_state: st.session_state.current_player_final_hand = []
     if 'current_player_card_vps' not in st.session_state: st.session_state.current_player_card_vps = {} 
     if 'turn_segment_in_progress' not in st.session_state: st.session_state.turn_segment_in_progress = False
     if 'current_turn_component_prob_overrides' not in st.session_state:
         st.session_state.current_turn_component_prob_overrides = {}
-    
-    # Monte Carlo related state
     if 'monte_carlo_projection' not in st.session_state: 
         st.session_state.monte_carlo_projection = None 
     if 'num_mc_simulations' not in st.session_state: 
         st.session_state.num_mc_simulations = 5000 
-    
-    # Confirmation dialog flags
     if 'show_confirm_new_game_setup' not in st.session_state:
         st.session_state.show_confirm_new_game_setup = False
     if 'show_confirm_new_game_sidebar' not in st.session_state:
         st.session_state.show_confirm_new_game_sidebar = False
 
 def load_default_primary_scores(mission_name, deployment_name):
-    """Loads default primary scores from the hardcoded dictionary."""
-    key = (mission_name, deployment_name) # Assumes casing matches dictionary keys
+    key = (mission_name, deployment_name) 
     scores = DEFAULT_PRIMARY_SCORES_DATA.get(key)
-
     if scores:
-        return list(scores) # Return a copy of the list of 5 integer scores
+        return list(scores) 
     else:
-        st.warning(f"Default primary scores for Mission '{mission_name}' and Deployment '{deployment_name}' not found in data. Defaulting to 0 for all turns.")
+        st.warning(f"Default primary scores for Mission '{mission_name}' and Deployment '{deployment_name}' not found. Defaulting to 0.")
         return None
 
 
@@ -369,7 +355,6 @@ def get_ev_recommendation(ev_score):
 
 def start_new_game():
     st.session_state.game_started = True
-    # These 'setup_X' keys are set when "Start Game" (initiate_start_game_setup) is clicked
     st.session_state.user_goes_first = st.session_state.setup_user_goes_first 
     st.session_state.paint_vp_bonus_selected = st.session_state.setup_paint_vp_bonus 
     st.session_state.user_removed_card_option = st.session_state.setup_user_removed_card_option
@@ -382,15 +367,14 @@ def start_new_game():
     if st.session_state.get('setup_reset_probs_on_new_game', True): 
         st.session_state.probabilities = {"user": {}, "opponent": {}} 
 
-    initialize_session_state() # This will build active_decks and init/prune probabilities
+    initialize_session_state() 
 
-    # Load and set default primary scores AFTER initialize_session_state has set up active decks
     default_mission_scores = load_default_primary_scores(
         st.session_state.selected_mission,
         st.session_state.selected_deployment
     )
     if default_mission_scores:
-        st.session_state.all_primary_vps["user"] = list(default_mission_scores) # Shared for both
+        st.session_state.all_primary_vps["user"] = list(default_mission_scores) 
         st.session_state.all_primary_vps["opponent"] = list(default_mission_scores)
     else: 
         st.session_state.all_primary_vps = {"user": [0] * MAX_GAME_TURNS, "opponent": [0] * MAX_GAME_TURNS}
@@ -678,23 +662,20 @@ def display_setup_screen():
     key_setup_user_removed_card = "widget_setup_user_removed_card_radio"
     key_setup_opponent_removed_card = "widget_setup_opponent_removed_card_radio"
     key_setup_reset_probs = "widget_reset_probs_on_new_game"
-    key_setup_mission = "widget_setup_selected_mission" # Key for the mission selectbox widget
-    key_setup_deployment = "widget_setup_selected_deployment" # Key for the deployment selectbox widget
+    key_setup_mission = "widget_setup_selected_mission" 
+    key_setup_deployment = "widget_setup_selected_deployment" 
 
 
     if st.session_state.get('show_confirm_new_game_setup', False):
         st.warning("Are you sure you want to start a new game with the selected settings? This will reset any current progress if a game was previously active.")
         col1, col2 = st.columns(2)
         if col1.button("Yes, Start New Game", key="confirm_yes_setup"):
-            # Transfer values from setup_... to main session state keys before starting
             st.session_state.user_goes_first = st.session_state.setup_user_goes_first
             st.session_state.paint_vp_bonus_selected = st.session_state.setup_paint_vp_bonus
             st.session_state.user_removed_card_option = st.session_state.setup_user_removed_card_option
             st.session_state.opponent_removed_card_option = st.session_state.setup_opponent_removed_card_option
-            st.session_state.selected_mission = st.session_state.setup_selected_mission # Transfer selected mission
-            st.session_state.selected_deployment = st.session_state.setup_selected_deployment # Transfer selected deployment
-            # setup_reset_probs_on_new_game is used directly by start_new_game
-
+            st.session_state.selected_mission = st.session_state.setup_selected_mission 
+            st.session_state.selected_deployment = st.session_state.setup_selected_deployment 
             start_new_game() 
             st.session_state.show_confirm_new_game_setup = False
             st.rerun()
@@ -702,7 +683,6 @@ def display_setup_screen():
             st.session_state.show_confirm_new_game_setup = False
             st.rerun()
     else:
-        # Display widgets using their specific keys
         st.checkbox("I will go first", key=key_setup_user_goes_first)
         st.checkbox(f"Start with {PAINT_BONUS_VP} 'Battle Ready' VP (Paint Bonus)", key=key_setup_paint_bonus)
         
@@ -721,13 +701,12 @@ def display_setup_screen():
         st.checkbox("Reset card probabilities to default on new game start", key=key_setup_reset_probs)
         
         if st.button("Start Game", key="initiate_start_game_setup"):
-            # Explicitly capture current widget values into 'setup_X' session state vars
             st.session_state.setup_user_goes_first = st.session_state[key_setup_user_goes_first]
             st.session_state.setup_paint_vp_bonus = st.session_state[key_setup_paint_bonus]
             st.session_state.setup_user_removed_card_option = st.session_state[key_setup_user_removed_card]
             st.session_state.setup_opponent_removed_card_option = st.session_state[key_setup_opponent_removed_card]
-            st.session_state.setup_selected_mission = st.session_state[key_setup_mission] # Capture selected mission
-            st.session_state.setup_selected_deployment = st.session_state[key_setup_deployment] # Capture selected deployment
+            st.session_state.setup_selected_mission = st.session_state[key_setup_mission] 
+            st.session_state.setup_selected_deployment = st.session_state[key_setup_deployment] 
             st.session_state.setup_reset_probs_on_new_game = st.session_state[key_setup_reset_probs]
 
             st.session_state.show_confirm_new_game_setup = True
@@ -924,6 +903,10 @@ def display_probability_settings():
         with tab_ui:
             cards_logged_by_this_player_set = get_cards_logged_by_player(player_type_ui)
             mulliganed_by_this_player_set = st.session_state.mulliganed_cards_by_player.get(player_type_ui, set())
+            
+            active_player_current_hand_for_prob_display = []
+            if player_type_ui == st.session_state.active_player_type and st.session_state.turn_segment_in_progress:
+                active_player_current_hand_for_prob_display = st.session_state.current_player_final_hand
 
             sorted_cards_in_player_active_deck = sorted([card for card in active_deck_ui if card in CARDS_DATA])
             
@@ -936,7 +919,7 @@ def display_probability_settings():
                 st.write(f"All cards in {player_type_ui.capitalize()}'s active deck have been used, mulliganed, or the deck is empty.")
             
             for card_name_tab in cards_to_display_probs_for:
-                if card_name_tab not in st.session_state.probabilities[player_type_ui]:
+                if card_name_tab not in st.session_state.probabilities[player_type_ui]: 
                     st.session_state.probabilities[player_type_ui][card_name_tab] = \
                         copy.deepcopy(ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_tab, {}))
                 
@@ -947,34 +930,62 @@ def display_probability_settings():
                             comp_vp_val = component_tab_data["vp"]
                             st.markdown(f"**{comp_label_tab} ({comp_vp_val} VP)**")
                             
-                            if comp_label_tab not in st.session_state.probabilities[player_type_ui][card_name_tab]:
+                            if comp_label_tab not in st.session_state.probabilities[player_type_ui][card_name_tab]: 
                                 st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab] = \
                                     copy.deepcopy(ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_tab,{}).get(comp_label_tab, {r:0.6 for r in range(1,MAX_GAME_TURNS+1)}))
 
-                            num_editable_rounds = MAX_GAME_TURNS - st.session_state.current_game_turn + 1
-                            if num_editable_rounds <= 0 and st.session_state.game_started : 
-                                past_round_probs_text = []
-                                for r_idx_ui_past in range(MAX_GAME_TURNS):
-                                    game_round_ui_past = r_idx_ui_past + 1
-                                    past_prob_ui = st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab].get(game_round_ui_past, 0.0)
-                                    past_round_probs_text.append(f"T{game_round_ui_past}: {past_prob_ui*100:.0f}%")
-                                st.caption(", ".join(past_round_probs_text) + " (Past - Not Editable)")
-                            elif num_editable_rounds > 0 :
-                                slider_cols_prob = st.columns(num_editable_rounds)
+                            # Determine which rounds to display sliders for
+                            rounds_to_show_sliders_labels = []
+                            for r_idx_ui_check in range(MAX_GAME_TURNS):
+                                game_round_ui_check = r_idx_ui_check + 1
+                                show_slider = True
+                                if st.session_state.game_started:
+                                    if game_round_ui_check < st.session_state.current_game_turn:
+                                        show_slider = False
+                                    elif game_round_ui_check == st.session_state.current_game_turn:
+                                        if player_type_ui != st.session_state.active_player_type:
+                                            show_slider = False
+                                        elif st.session_state.turn_segment_in_progress and \
+                                             card_name_tab not in active_player_current_hand_for_prob_display:
+                                            show_slider = False
+                                if show_slider:
+                                    rounds_to_show_sliders_labels.append(f"T{game_round_ui_check}")
+                            
+                            if rounds_to_show_sliders_labels:
+                                slider_cols_prob = st.columns(len(rounds_to_show_sliders_labels))
                                 col_idx = 0
-                                for r_idx_ui in range(st.session_state.current_game_turn -1, MAX_GAME_TURNS): 
+                                for r_idx_ui in range(MAX_GAME_TURNS): # Iterate all rounds to check conditions
                                     game_round_ui = r_idx_ui + 1
-                                    with slider_cols_prob[col_idx]:
-                                        current_prob_float = st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab].get(game_round_ui, 0.0)
-                                        new_prob_percent = st.slider(
-                                            f"T{game_round_ui}", 0, 100, int(current_prob_float * 100), step=10, 
-                                            key=f"prob_slider_{player_type_ui}_{card_name_tab}_{comp_label_tab.replace(' ','_')}_r{game_round_ui}", 
-                                            label_visibility="visible", format="%d%%"
-                                        )
-                                        new_prob_float = new_prob_percent / 100.0
-                                        if new_prob_float != current_prob_float: 
-                                            st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab][game_round_ui] = new_prob_float
-                                    col_idx +=1
+                                    
+                                    # Determine if this round's slider should be shown based on refined logic
+                                    display_this_round_slider = True
+                                    if st.session_state.game_started:
+                                        if game_round_ui < st.session_state.current_game_turn:
+                                            display_this_round_slider = False
+                                        elif game_round_ui == st.session_state.current_game_turn:
+                                            if player_type_ui != st.session_state.active_player_type:
+                                                display_this_round_slider = False
+                                            elif st.session_state.turn_segment_in_progress and \
+                                                 card_name_tab not in active_player_current_hand_for_prob_display:
+                                                display_this_round_slider = False
+                                    
+                                    if display_this_round_slider:
+                                        if col_idx < len(slider_cols_prob): # Ensure we don't exceed allocated columns
+                                            with slider_cols_prob[col_idx]:
+                                                st.markdown(f"<p style='text-align: center; font-weight: bold;'>T{game_round_ui}</p>", unsafe_allow_html=True)
+                                                current_prob_float = st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab].get(game_round_ui, 0.0)
+                                                new_prob_percent = st.slider(
+                                                    f"T{game_round_ui} Prob Label", # Non-empty label
+                                                    0, 100, int(current_prob_float * 100), step=10, 
+                                                    key=f"prob_slider_{player_type_ui}_{card_name_tab}_{comp_label_tab.replace(' ','_')}_r{game_round_ui}", 
+                                                    label_visibility="collapsed", format="%d%%"
+                                                )
+                                                new_prob_float = new_prob_percent / 100.0
+                                                if new_prob_float != current_prob_float: 
+                                                    st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab][game_round_ui] = new_prob_float
+                                            col_idx +=1
+                            # else: # No editable rounds for this component
+                                # st.caption("No editable rounds for this card/component at this time.") # Optionally uncomment
                         st.markdown("---") 
                     else: 
                         st.caption(f"Probability data for '{card_name_tab}' not found for {player_type_ui}.")
@@ -1023,14 +1034,13 @@ def main():
     st.set_page_config(layout="wide") 
     st.title("Warhammer 40k Game Simulator & Tracker") 
 
-    # Initialize widget-specific keys for setup screen to ensure they exist before widgets are rendered
     if 'widget_setup_user_goes_first' not in st.session_state:
         st.session_state.widget_setup_user_goes_first = True
     if 'widget_setup_paint_bonus' not in st.session_state:
         st.session_state.widget_setup_paint_bonus = False
-    if 'widget_setup_user_removed_card_radio' not in st.session_state: # Key for the radio widget itself
+    if 'widget_setup_user_removed_card_radio' not in st.session_state: 
         st.session_state.widget_setup_user_removed_card_radio = "Keep Both"
-    if 'widget_setup_opponent_removed_card_radio' not in st.session_state: # Key for the radio widget itself
+    if 'widget_setup_opponent_removed_card_radio' not in st.session_state: 
         st.session_state.widget_setup_opponent_removed_card_radio = "Keep Both"
     if 'widget_reset_probs_on_new_game' not in st.session_state:
         st.session_state.widget_reset_probs_on_new_game = True
@@ -1039,13 +1049,12 @@ def main():
     if 'widget_setup_selected_deployment' not in st.session_state:
         st.session_state.widget_setup_selected_deployment = DEPLOYMENT_TYPES[0]
         
-    # Initialize confirmation flags if they don't exist
     if 'show_confirm_new_game_setup' not in st.session_state: 
         st.session_state.show_confirm_new_game_setup = False
     if 'show_confirm_new_game_sidebar' not in st.session_state:
         st.session_state.show_confirm_new_game_sidebar = False
         
-    initialize_session_state() # Initialize core game state based on current setup choices
+    initialize_session_state() 
 
     if not st.session_state.game_started: 
         display_setup_screen()
