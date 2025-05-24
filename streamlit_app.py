@@ -792,7 +792,8 @@ def display_current_turn_interface():
 
                     estimated_prob = st.slider(
                         f"{comp_label_override}", 0.0, 1.0, current_override_val, step=0.01,
-                        key=f"override_prob_{card_name_override}_{comp_label_override.replace(' ','_')}_{st.session_state.current_game_turn}"
+                        key=f"override_prob_{card_name_override}_{comp_label_override.replace(' ','_')}_{st.session_state.current_game_turn}",
+                        format="%.2f" # Display as float, can be changed to "%.0f%%" for percentage
                     )
                     st.session_state.current_turn_component_prob_overrides[card_name_override][comp_label_override] = estimated_prob
         
@@ -862,7 +863,7 @@ def display_probability_settings():
                                 current_prob_ui = st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab].get(game_round_ui, 0.0)
                                 new_prob_ui = col_ui.slider(f"T{game_round_ui}", 0.0, 1.0, current_prob_ui, step=0.01, 
                                                             key=f"prob_slider_{player_type_ui}_{card_name_tab}_{comp_label_tab.replace(' ','_')}_r{game_round_ui}", 
-                                                            label_visibility="collapsed")
+                                                            label_visibility="collapsed", format="%.2f") # Display as float, can be "%.0f%%"
                                 if new_prob_ui != current_prob_ui: 
                                     st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab][game_round_ui] = new_prob_ui
                         st.markdown("---") 
@@ -986,7 +987,6 @@ def main():
                                 try: new_parsed_probs_user_sidebar[card_name_from_csv_sb][comp_label_from_csv_sb][r_from_csv_sb] = float(csv_row_sb[col_name_sb])
                                 except ValueError: pass 
                 st.session_state.probabilities["user"] = new_parsed_probs_user_sidebar
-                # Opponent probabilities are NOT automatically mirrored from user upload anymore
                 st.sidebar.success("User probabilities successfully uploaded!"); st.rerun() 
             except Exception as e_csv_sb: st.sidebar.error(f"Error processing User CSV: {e_csv_sb}")
 
@@ -1002,9 +1002,7 @@ def main():
                         new_parsed_probs_opp_sidebar[card_name_parse_sb_opp] = {}
                         for component_parse_sb_opp in CARDS_DATA[card_name_parse_sb_opp].get("vp_components",[]):
                             comp_label_parse_sb_opp = component_parse_sb_opp["label"]
-                            # Use opponent's defaults if available, else user's, else generic
-                            default_comp_probs_sb_opp = ROUND_BASED_DEFAULT_PROBABILITIES.get("opponent", ROUND_BASED_DEFAULT_PROBABILITIES["user"])\
-                                .get(card_name_parse_sb_opp,{}).get(comp_label_parse_sb_opp,{r:0.6 for r in range(1,MAX_GAME_TURNS+1)})
+                            default_comp_probs_sb_opp = ROUND_BASED_DEFAULT_PROBABILITIES["opponent"].get(card_name_parse_sb_opp,{}).get(comp_label_parse_sb_opp,{r:0.6 for r in range(1,MAX_GAME_TURNS+1)})
                             new_parsed_probs_opp_sidebar[card_name_parse_sb_opp][comp_label_parse_sb_opp] = copy.deepcopy(default_comp_probs_sb_opp)
                 for _, csv_row_sb_opp in uploaded_df_sidebar_opp.iterrows():
                     card_name_from_csv_sb_opp = csv_row_sb_opp.get("Card Name")
