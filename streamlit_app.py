@@ -182,7 +182,6 @@ def initialize_session_state():
     if 'active_player_type' not in st.session_state: st.session_state.active_player_type = "user"
     if 'game_log' not in st.session_state: st.session_state.game_log = []
     
-    # These are now set by start_new_game from the setup_... keys, or default if accessed before setup
     if 'user_removed_card_option' not in st.session_state: 
         st.session_state.user_removed_card_option = "Keep Both" 
     if 'opponent_removed_card_option' not in st.session_state:
@@ -197,38 +196,31 @@ def initialize_session_state():
     if 'probabilities' not in st.session_state:
         st.session_state.probabilities = {"user": {}, "opponent": {}}
     
-    # If reset_probs_on_new_game was true (captured in setup_reset_probs_on_new_game), 
-    # this ensures probabilities are rebuilt from defaults for the current active decks.
-    # This logic is now more robustly handled within start_new_game before calling initialize_session_state.
-    # However, this loop still ensures structure is correct if probabilities partially exist.
     for player_type_init, active_deck_init in [("user", st.session_state.user_active_deck), 
                                                ("opponent", st.session_state.opponent_active_deck)]:
-        if player_type_init not in st.session_state.probabilities: # Ensure player key exists
+        if player_type_init not in st.session_state.probabilities:
             st.session_state.probabilities[player_type_init] = {}
         
         player_probs = st.session_state.probabilities[player_type_init]
         
-        for card_name_init in active_deck_init: # Iterate through cards in the player's current active deck
+        for card_name_init in active_deck_init:
             default_card_prob_components = ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_init, {})
             
-            if card_name_init not in player_probs: # If card not in player's prob dict, add it fully
+            if card_name_init not in player_probs: 
                 player_probs[card_name_init] = copy.deepcopy(default_card_prob_components)
-            else: # Card exists, ensure all its defined components and rounds exist
-                if card_name_init in CARDS_DATA: # Check if card has defined components
+            else: 
+                if card_name_init in CARDS_DATA: 
                     for component in CARDS_DATA[card_name_init].get("vp_components", []):
                         comp_label = component["label"]
-                        if comp_label not in player_probs[card_name_init]: # If component missing for card
-                            # Add component from default, or a generic default if not in global defaults
+                        if comp_label not in player_probs[card_name_init]: 
                             player_probs[card_name_init][comp_label] = \
                                 copy.deepcopy(default_card_prob_components.get(comp_label, {r: 0.6 for r in range(1, MAX_GAME_TURNS + 1)}))
-                        else: # Component label exists, ensure all rounds for this component
+                        else: 
                             for r_idx_init in range(1, MAX_GAME_TURNS + 1):
                                 if r_idx_init not in player_probs[card_name_init][comp_label]:
-                                    # Add missing round from default, or generic default
                                     player_probs[card_name_init][comp_label][r_idx_init] = \
                                         default_card_prob_components.get(comp_label, {}).get(r_idx_init, 0.6)
         
-        # Clean up probabilities for cards no longer in this player's active_deck
         keys_to_remove_prob = [k for k in player_probs if k not in active_deck_init]
         for k_rem_prob in keys_to_remove_prob:
             del player_probs[k_rem_prob]
@@ -251,22 +243,21 @@ def initialize_session_state():
         st.session_state.show_confirm_new_game_sidebar = False
 
 
-def get_permanently_used_cards(): 
-    used_cards = set()
+def get_cards_logged_by_player(player_type):
+    logged_by_player = set()
     for log_entry in st.session_state.game_log:
-        for card_slot_key in ["card_1", "card_2"]: 
-            card_name_in_log = log_entry[f"{card_slot_key}_name"]
-            if card_name_in_log: 
-                used_cards.add(card_name_in_log)
-    for log_entry in st.session_state.game_log:
-        if "final_hand_after_mulligan_or_selection" in log_entry:
-            for card_name_in_final_hand in log_entry["final_hand_after_mulligan_or_selection"]:
-                if card_name_in_final_hand:
-                    used_cards.add(card_name_in_final_hand)
-    return list(used_cards)
+        if log_entry['player_type'] == player_type:
+            if "final_hand_after_mulligan_or_selection" in log_entry:
+                for card_used in log_entry["final_hand_after_mulligan_or_selection"]:
+                    if card_used: 
+                        logged_by_player.add(card_used)
+            elif log_entry.get("card_1_name"): logged_by_player.add(log_entry["card_1_name"])
+            elif log_entry.get("card_2_name"): logged_by_player.add(log_entry["card_2_name"])
+    return logged_by_player
+
 
 def get_available_deck(player_type):
-    permanently_used_global = get_permanently_used_cards() 
+    cards_used_by_this_player = get_cards_logged_by_player(player_type)
     mulliganed_out_for_player = st.session_state.mulliganed_cards_by_player.get(player_type, set())
     
     active_deck_for_player = []
@@ -276,7 +267,7 @@ def get_available_deck(player_type):
         active_deck_for_player = st.session_state.opponent_active_deck
     
     return [card for card in active_deck_for_player 
-            if card not in permanently_used_global and card not in mulliganed_out_for_player]
+            if card not in cards_used_by_this_player and card not in mulliganed_out_for_player]
 
 def calculate_hand_ev(hand, player_type, game_turn, use_overrides=False):
     if not hand: return 0
@@ -309,7 +300,6 @@ def get_ev_recommendation(ev_score):
 
 def start_new_game():
     st.session_state.game_started = True
-    # These 'setup_X' keys are now reliably set when 'initiate_start_game_setup' button is pressed
     st.session_state.user_goes_first = st.session_state.setup_user_goes_first 
     st.session_state.paint_vp_bonus_selected = st.session_state.setup_paint_vp_bonus 
     st.session_state.user_removed_card_option = st.session_state.setup_user_removed_card_option
@@ -317,11 +307,10 @@ def start_new_game():
     
     st.session_state.mulliganed_cards_by_player = {"user": set(), "opponent": set()}
     
-    # If reset_probs is true, clear existing probabilities before initialize_session_state rebuilds them
-    if st.session_state.get('setup_reset_probs_on_new_game', True): # Use the captured setup value
+    if st.session_state.get('setup_reset_probs_on_new_game', True): 
         st.session_state.probabilities = {"user": {}, "opponent": {}} 
 
-    initialize_session_state() # Builds active_decks and then probabilities
+    initialize_session_state() 
 
     st.session_state.current_game_turn = 1 
     st.session_state.active_player_type = "user" if st.session_state.user_goes_first else "opponent" 
@@ -491,21 +480,24 @@ def run_monte_carlo_for_future_secondaries(player_type, num_simulations,
 
     for _ in range(num_simulations):
         sim_run_vp = 0.0
-        permanently_used_in_game = set()
+        
+        # Cards used by THIS player in the main game log for this simulation run
+        cards_used_by_sim_player_this_run = set()
         for entry in game_log_sim:
-            if entry.get("final_hand_after_mulligan_or_selection"):
-                for card_used in entry["final_hand_after_mulligan_or_selection"]:
-                    if card_used: permanently_used_in_game.add(card_used)
-            else: 
-                if entry["card_1_name"]: permanently_used_in_game.add(entry["card_1_name"])
-                if entry["card_2_name"]: permanently_used_in_game.add(entry["card_2_name"])
+            if entry['player_type'] == player_type: 
+                if entry.get("final_hand_after_mulligan_or_selection"):
+                    for card_used in entry["final_hand_after_mulligan_or_selection"]:
+                        if card_used: cards_used_by_sim_player_this_run.add(card_used)
+                elif entry.get("card_1_name"): cards_used_by_sim_player_this_run.add(entry["card_1_name"])
+                elif entry.get("card_2_name"): cards_used_by_sim_player_this_run.add(entry["card_2_name"])
 
 
         player_initial_active_deck = st.session_state.user_active_deck if player_type == "user" else st.session_state.opponent_active_deck
         mulliganed_by_this_player = st.session_state.mulliganed_cards_by_player.get(player_type, set())
+        
         sim_initial_available_deck = [
             card for card in player_initial_active_deck 
-            if card not in permanently_used_in_game and \
+            if card not in cards_used_by_sim_player_this_run and \
                card not in mulliganed_by_this_player and \
                card not in (actual_current_hand_sim or [])
         ]
@@ -600,7 +592,6 @@ def run_and_store_monte_carlo_projections():
 def display_setup_screen():
     st.header("Game Setup")
 
-    # Define keys for setup widgets to avoid conflicts if these keys are used elsewhere
     key_setup_user_goes_first = "widget_setup_user_goes_first"
     key_setup_paint_bonus = "widget_setup_paint_bonus"
     key_setup_user_removed_card = "widget_setup_user_removed_card_radio"
@@ -611,7 +602,6 @@ def display_setup_screen():
         st.warning("Are you sure you want to start a new game with the selected settings? This will reset any current progress if a game was previously active.")
         col1, col2 = st.columns(2)
         if col1.button("Yes, Start New Game", key="confirm_yes_setup"):
-            # Values were captured into st.session_state.setup_... variables before rerun
             start_new_game() 
             st.session_state.show_confirm_new_game_setup = False
             st.rerun()
@@ -619,7 +609,6 @@ def display_setup_screen():
             st.session_state.show_confirm_new_game_setup = False
             st.rerun()
     else:
-        # Display widgets using their specific keys
         st.checkbox("I will go first", value=st.session_state.get(key_setup_user_goes_first, True), key=key_setup_user_goes_first)
         st.checkbox(f"Start with {PAINT_BONUS_VP} 'Battle Ready' VP (Paint Bonus)", 
                     value=st.session_state.get(key_setup_paint_bonus, False), key=key_setup_paint_bonus)
@@ -628,12 +617,12 @@ def display_setup_screen():
         
         st.radio(
             "User's Deck: Optional Card Removal:", options=removal_options,
-            index=removal_options.index(st.session_state.get(key_setup_user_removed_card, "Keep Both")), # Use widget key for default
+            index=removal_options.index(st.session_state.get("user_removed_card_option", "Keep Both")), 
             key=key_setup_user_removed_card 
         )
         st.radio(
             "Opponent's Deck: Optional Card Removal:", options=removal_options,
-            index=removal_options.index(st.session_state.get(key_setup_opponent_removed_card, "Keep Both")), # Use widget key for default
+            index=removal_options.index(st.session_state.get("opponent_removed_card_option", "Keep Both")), 
             key=key_setup_opponent_removed_card
         )
 
@@ -641,7 +630,6 @@ def display_setup_screen():
                     value=st.session_state.get(key_setup_reset_probs, True), key=key_setup_reset_probs)
         
         if st.button("Start Game", key="initiate_start_game_setup"):
-            # Explicitly capture current widget values into 'setup_X' session state vars
             st.session_state.setup_user_goes_first = st.session_state[key_setup_user_goes_first]
             st.session_state.setup_paint_vp_bonus = st.session_state[key_setup_paint_bonus]
             st.session_state.setup_user_removed_card_option = st.session_state[key_setup_user_removed_card]
@@ -836,17 +824,21 @@ def display_probability_settings():
     
     user_tab, opponent_tab = st.tabs(["User's Probabilities", "Opponent's Probabilities"])
     
-    permanently_used_cards_for_display = get_permanently_used_cards() 
-
     for player_type_ui, tab_ui, active_deck_ui in [("user", user_tab, st.session_state.user_active_deck), 
                                                    ("opponent", opponent_tab, st.session_state.opponent_active_deck)]:
         with tab_ui:
-            sorted_cards_for_tabs = sorted([card for card in active_deck_ui if card in CARDS_DATA])
+            cards_logged_by_this_player_set = get_cards_logged_by_player(player_type_ui)
+            mulliganed_by_this_player_set = st.session_state.mulliganed_cards_by_player.get(player_type_ui, set())
+
+            sorted_cards_in_player_active_deck = sorted([card for card in active_deck_ui if card in CARDS_DATA])
             
-            cards_to_display_probs_for = [card for card in sorted_cards_for_tabs if card not in permanently_used_cards_for_display]
+            cards_to_display_probs_for = [
+                card for card in sorted_cards_in_player_active_deck 
+                if card not in cards_logged_by_this_player_set and card not in mulliganed_by_this_player_set
+            ]
 
             if not cards_to_display_probs_for:
-                st.write(f"All cards in {player_type_ui.capitalize()}'s active deck have been used or the deck is empty.")
+                st.write(f"All cards in {player_type_ui.capitalize()}'s active deck have been used, mulliganed, or the deck is empty.")
             
             for card_name_tab in cards_to_display_probs_for:
                 if card_name_tab not in st.session_state.probabilities[player_type_ui]:
@@ -949,6 +941,7 @@ def main():
         
         st.sidebar.markdown("---")
         st.sidebar.subheader("Probability CSV Management")
+        # User CSV Download
         user_active_deck_for_csv = st.session_state.user_active_deck
         user_probs_csv_data = []
         for card_name_csv in user_active_deck_for_csv: 
@@ -960,7 +953,6 @@ def main():
                     for r_csv in range(1, MAX_GAME_TURNS + 1):
                         row_data[f"Round {r_csv}"] = comp_probs_csv.get(r_csv, 0.0)
                     user_probs_csv_data.append(row_data)
-        
         if user_probs_csv_data:
             user_probs_df = pd.DataFrame(user_probs_csv_data)
             st.sidebar.download_button(label="Download User Probabilities (CSV)", 
@@ -969,11 +961,12 @@ def main():
                                key="sidebar_download_user_probabilities_csv_button")
         else: st.sidebar.info("User's deck empty for CSV download.")
 
-        csv_upload_file_sidebar = st.sidebar.file_uploader("Upload User Probabilities (CSV File)", type="csv", 
+        # User CSV Upload
+        csv_upload_file_sidebar_user = st.sidebar.file_uploader("Upload User Probabilities (CSV File)", type="csv", 
                                            key="sidebar_upload_user_probabilities_csv_uploader")
-        if csv_upload_file_sidebar is not None:
+        if csv_upload_file_sidebar_user is not None:
             try:
-                uploaded_df_sidebar = pd.read_csv(csv_upload_file_sidebar)
+                uploaded_df_sidebar = pd.read_csv(csv_upload_file_sidebar_user)
                 new_parsed_probs_user_sidebar = {}
                 for card_name_parse_sb in st.session_state.user_active_deck: 
                     if card_name_parse_sb in CARDS_DATA:
@@ -982,7 +975,6 @@ def main():
                             comp_label_parse_sb = component_parse_sb["label"]
                             default_comp_probs_sb = ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_parse_sb,{}).get(comp_label_parse_sb,{r:0.6 for r in range(1,MAX_GAME_TURNS+1)})
                             new_parsed_probs_user_sidebar[card_name_parse_sb][comp_label_parse_sb] = copy.deepcopy(default_comp_probs_sb)
-
                 for _, csv_row_sb in uploaded_df_sidebar.iterrows():
                     card_name_from_csv_sb = csv_row_sb.get("Card Name")
                     comp_label_from_csv_sb = csv_row_sb.get("Component Label")
@@ -994,9 +986,40 @@ def main():
                                 try: new_parsed_probs_user_sidebar[card_name_from_csv_sb][comp_label_from_csv_sb][r_from_csv_sb] = float(csv_row_sb[col_name_sb])
                                 except ValueError: pass 
                 st.session_state.probabilities["user"] = new_parsed_probs_user_sidebar
-                st.session_state.probabilities["opponent"] = copy.deepcopy(new_parsed_probs_user_sidebar) 
-                st.sidebar.success("User probabilities uploaded!"); st.rerun() 
-            except Exception as e_csv_sb: st.sidebar.error(f"Error processing CSV: {e_csv_sb}")
+                # Opponent probabilities are NOT automatically mirrored from user upload anymore
+                st.sidebar.success("User probabilities successfully uploaded!"); st.rerun() 
+            except Exception as e_csv_sb: st.sidebar.error(f"Error processing User CSV: {e_csv_sb}")
+
+        # Opponent CSV Upload
+        csv_upload_file_sidebar_opp = st.sidebar.file_uploader("Upload Opponent Probabilities (CSV File)", type="csv", 
+                                           key="sidebar_upload_opponent_probabilities_csv_uploader")
+        if csv_upload_file_sidebar_opp is not None:
+            try:
+                uploaded_df_sidebar_opp = pd.read_csv(csv_upload_file_sidebar_opp)
+                new_parsed_probs_opp_sidebar = {}
+                for card_name_parse_sb_opp in st.session_state.opponent_active_deck: 
+                    if card_name_parse_sb_opp in CARDS_DATA:
+                        new_parsed_probs_opp_sidebar[card_name_parse_sb_opp] = {}
+                        for component_parse_sb_opp in CARDS_DATA[card_name_parse_sb_opp].get("vp_components",[]):
+                            comp_label_parse_sb_opp = component_parse_sb_opp["label"]
+                            # Use opponent's defaults if available, else user's, else generic
+                            default_comp_probs_sb_opp = ROUND_BASED_DEFAULT_PROBABILITIES.get("opponent", ROUND_BASED_DEFAULT_PROBABILITIES["user"])\
+                                .get(card_name_parse_sb_opp,{}).get(comp_label_parse_sb_opp,{r:0.6 for r in range(1,MAX_GAME_TURNS+1)})
+                            new_parsed_probs_opp_sidebar[card_name_parse_sb_opp][comp_label_parse_sb_opp] = copy.deepcopy(default_comp_probs_sb_opp)
+                for _, csv_row_sb_opp in uploaded_df_sidebar_opp.iterrows():
+                    card_name_from_csv_sb_opp = csv_row_sb_opp.get("Card Name")
+                    comp_label_from_csv_sb_opp = csv_row_sb_opp.get("Component Label")
+                    if card_name_from_csv_sb_opp in new_parsed_probs_opp_sidebar and \
+                       comp_label_from_csv_sb_opp in new_parsed_probs_opp_sidebar.get(card_name_from_csv_sb_opp, {}):
+                        for r_from_csv_sb_opp in range(1, MAX_GAME_TURNS + 1):
+                            col_name_sb_opp = f"Round {r_from_csv_sb_opp}"
+                            if col_name_sb_opp in csv_row_sb_opp:
+                                try: new_parsed_probs_opp_sidebar[card_name_from_csv_sb_opp][comp_label_from_csv_sb_opp][r_from_csv_sb_opp] = float(csv_row_sb_opp[col_name_sb_opp])
+                                except ValueError: pass 
+                st.session_state.probabilities["opponent"] = new_parsed_probs_opp_sidebar
+                st.sidebar.success("Opponent probabilities successfully uploaded!"); st.rerun() 
+            except Exception as e_csv_sb_opp: st.sidebar.error(f"Error processing Opponent CSV: {e_csv_sb_opp}")
+
 
         st.markdown("---"); display_probability_settings() 
         st.markdown("---"); display_edit_past_scores() 
