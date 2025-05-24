@@ -481,7 +481,6 @@ def run_monte_carlo_for_future_secondaries(player_type, num_simulations,
     for _ in range(num_simulations):
         sim_run_vp = 0.0
         
-        # Cards used by THIS player in the main game log for this simulation run
         cards_used_by_sim_player_this_run = set()
         for entry in game_log_sim:
             if entry['player_type'] == player_type: 
@@ -789,13 +788,14 @@ def display_current_turn_interface():
                         .get(st.session_state.current_game_turn, 0.6) 
                     
                     current_override_val = st.session_state.current_turn_component_prob_overrides[card_name_override].get(comp_label_override, default_prob_for_slider)
-
-                    estimated_prob = st.slider(
-                        f"{comp_label_override}", 0.0, 1.0, current_override_val, step=0.01,
+                    
+                    # Slider for override probability
+                    estimated_prob_percent = st.slider(
+                        f"{comp_label_override}", 0, 100, int(current_override_val * 100), step=10,
                         key=f"override_prob_{card_name_override}_{comp_label_override.replace(' ','_')}_{st.session_state.current_game_turn}",
-                        format="%.2f" # Display as float, can be changed to "%.0f%%" for percentage
+                        format="%d%%" 
                     )
-                    st.session_state.current_turn_component_prob_overrides[card_name_override][comp_label_override] = estimated_prob
+                    st.session_state.current_turn_component_prob_overrides[card_name_override][comp_label_override] = estimated_prob_percent / 100.0
         
         ev_final_override = calculate_hand_ev(final_hand_to_score, "user", st.session_state.current_game_turn, use_overrides=True)
         st.info(f"EV of final hand (with your estimates): {ev_final_override:.2f}. {get_ev_recommendation(ev_final_override)}")
@@ -857,15 +857,27 @@ def display_probability_settings():
                                 st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab] = \
                                     copy.deepcopy(ROUND_BASED_DEFAULT_PROBABILITIES["user"].get(card_name_tab,{}).get(comp_label_tab, {r:0.6 for r in range(1,MAX_GAME_TURNS+1)}))
 
-                            slider_cols_prob = st.columns(MAX_GAME_TURNS)
-                            for r_idx_ui, col_ui in enumerate(slider_cols_prob):
-                                game_round_ui = r_idx_ui + 1
-                                current_prob_ui = st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab].get(game_round_ui, 0.0)
-                                new_prob_ui = col_ui.slider(f"T{game_round_ui}", 0.0, 1.0, current_prob_ui, step=0.01, 
-                                                            key=f"prob_slider_{player_type_ui}_{card_name_tab}_{comp_label_tab.replace(' ','_')}_r{game_round_ui}", 
-                                                            label_visibility="collapsed", format="%.2f") # Display as float, can be "%.0f%%"
-                                if new_prob_ui != current_prob_ui: 
-                                    st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab][game_round_ui] = new_prob_ui
+                            # Determine number of columns for current/future rounds
+                            num_editable_rounds = MAX_GAME_TURNS - st.session_state.current_game_turn + 1
+                            if num_editable_rounds > 0:
+                                slider_cols_prob = st.columns(num_editable_rounds)
+                                col_idx = 0
+                                for r_idx_ui in range(st.session_state.current_game_turn -1, MAX_GAME_TURNS): # Iterate from current game turn index
+                                    game_round_ui = r_idx_ui + 1
+                                    with slider_cols_prob[col_idx]:
+                                        current_prob_float = st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab].get(game_round_ui, 0.0)
+                                        # Slider operates on 0-100 scale for percentage display
+                                        new_prob_percent = st.slider(
+                                            f"T{game_round_ui}", 0, 100, int(current_prob_float * 100), step=10, 
+                                            key=f"prob_slider_{player_type_ui}_{card_name_tab}_{comp_label_tab.replace(' ','_')}_r{game_round_ui}", 
+                                            label_visibility="visible", format="%d%%"
+                                        )
+                                        new_prob_float = new_prob_percent / 100.0
+                                        if new_prob_float != current_prob_float: 
+                                            st.session_state.probabilities[player_type_ui][card_name_tab][comp_label_tab][game_round_ui] = new_prob_float
+                                    col_idx +=1
+                            else: # All rounds have passed
+                                st.caption(f"Probabilities for T1-T{MAX_GAME_TURNS} (Past - Not Editable)")
                         st.markdown("---") 
                     else: 
                         st.caption(f"Probability data for '{card_name_tab}' not found for {player_type_ui}.")
@@ -942,7 +954,6 @@ def main():
         
         st.sidebar.markdown("---")
         st.sidebar.subheader("Probability CSV Management")
-        # User CSV Download
         user_active_deck_for_csv = st.session_state.user_active_deck
         user_probs_csv_data = []
         for card_name_csv in user_active_deck_for_csv: 
@@ -962,7 +973,6 @@ def main():
                                key="sidebar_download_user_probabilities_csv_button")
         else: st.sidebar.info("User's deck empty for CSV download.")
 
-        # User CSV Upload
         csv_upload_file_sidebar_user = st.sidebar.file_uploader("Upload User Probabilities (CSV File)", type="csv", 
                                            key="sidebar_upload_user_probabilities_csv_uploader")
         if csv_upload_file_sidebar_user is not None:
@@ -990,7 +1000,6 @@ def main():
                 st.sidebar.success("User probabilities successfully uploaded!"); st.rerun() 
             except Exception as e_csv_sb: st.sidebar.error(f"Error processing User CSV: {e_csv_sb}")
 
-        # Opponent CSV Upload
         csv_upload_file_sidebar_opp = st.sidebar.file_uploader("Upload Opponent Probabilities (CSV File)", type="csv", 
                                            key="sidebar_upload_opponent_probabilities_csv_uploader")
         if csv_upload_file_sidebar_opp is not None:
